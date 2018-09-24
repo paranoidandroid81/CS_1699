@@ -1,5 +1,7 @@
 /**
- * Implementation of centralized StringCoin cryptocurrency
+ * CS 1699 Project 1: StringCoin
+ * Fall 2018
+ * Author: Michael Korst (mpk44@pitt.edu)
  */
 
  import java.io.*;
@@ -7,10 +9,11 @@
  import java.security.spec.*;
  import java.util.*;
  import java.lang.StringBuilder;
+ import java.nio.charset.StandardCharsets;
 
  public class StringCoin
  {
-   //hash map to track what address (public key) controls coin
+   //hash map to track what address (public key) controls coin; Key: Coin, Value: Address
    static HashMap<String, String> coin_map = new HashMap<>();
    static int coin_count;           //number of coins in circulation
    //since Bill is originator of all coins, we require his public key
@@ -22,6 +25,7 @@
    /**
     * Given some arbitrary byte array bytes, convert it to a hex string.
     * Example: [0xFF, 0xA0, 0x01] -> "FFA001"
+    * Code borrowed from Laboon: Sha256Hash.java
     * @param bytes arbitrary-length array of bytes
     * @return String hex string version of byte array
     */
@@ -117,19 +121,23 @@
     * @param block_hash - hash of that line (provided in file) to compare
     * @return Boolean - true if hash valid, false if not (throws exception)
    */
-   public static boolean validate_hash(String block_line, String block_hash)
+   public static boolean validate_hash(String block_line, String block_hash) throws InvalidDataException
    {
-     if (block_line == null && block_hash == "0")
+     if (block_line == null && block_hash.equals("0"))
      {
        return true;         //genesis block, special hash
      }
+     //remove new lines and tabs
+     block_line = block_line.replaceAll("\\r\\n", "");
      byte[] hash = null;
-     byte[] file_hash = block_hash.getBytes();
+     byte[] file_hash = convertHexToBytes(block_hash);
+
      try
      {
        //create SHA-256 hash of raw line to ensure following hash is correct
-       MessageDigest digest = MessageDigest.getInstance("SHA-256");
-       hash = digest.digest(block_line.getBytes());
+       MessageDigest md = MessageDigest.getInstance("SHA-256");
+       md.update(block_line.getBytes());
+       hash = md.digest();
      } catch (NoSuchAlgorithmException nsaex)
      {
        System.err.println("No SHA-256 algorithm found.");
@@ -142,8 +150,7 @@
        return true;         //file hash is valid
      } else
      {
-       //TODO: throw InvalidDataException. hash not valid
-       return false;
+       throw new InvalidDataException(block_hash, 0);
      }
    }
 
@@ -158,8 +165,7 @@
      //coin already exists, invalid
      if (coin_map.containsKey(coin_id))
      {
-       //TODO: throw InvalidDataException, can't create same coins
-       return false;
+       throw new InvalidDataException(coin_id, 1);
      }
      boolean valid_coin_sig;
      //see if coin validly signed by Bill
@@ -167,8 +173,7 @@
      if (!valid_coin_sig)
      {
        //invalidly signed coins
-       //TODO: throw InvalidDataException; coin sig not valid for bill
-       return false;
+       throw new InvalidDataException(coin_sig, 3);
      } else {
        //coin validly created, associate coin with Bill's pub key as he is creator, increment count
        coin_count++;
@@ -210,14 +215,12 @@
      String block_pk = coin_map.get(coin_id);
      if (block_pk == null)
      {
-       //TODO: throw InvalidDataException, coin not found or not associated
-       return false;
+       throw new InvalidDataException(coin_id, 1);
      }
      valid_sig = verifyMessage(partial_block, block_sig, block_pk);
      if (!valid_sig)
      {
-       //TODO: throw InvalidDataException, block/line not properly unsigned
-       return false;
+       throw new InvalidDataException(block_sig, 2);
      } else {
        return true;         //fine
      }
@@ -229,13 +232,12 @@
     * @param recip_key - public key (address) of recipient of coin
     * @return Boolean - true if coin valid and transferred, false if invalid
    */
-   public static boolean transfer_coin(String coin_id, String recip_key)
+   public static boolean transfer_coin(String coin_id, String recip_key) throws InvalidDataException
    {
      //coin doesn't exist, invalid
      if (!coin_map.containsKey(coin_id))
      {
-       //TODO: throw InvalidDataException, coin not extant
-       return false;
+       throw new InvalidDataException(coin_id, 1);
      }
      //valid coin! transfer
      coin_map.put(coin_id, recip_key);
@@ -265,27 +267,32 @@
        System.err.println(e);
        System.exit(1);        //something wrong with input file, exit
      }
-     //now that we have number of lines (num of blocks), we can build blockchain
-     Blockchain blockchain = new Blockchain();
-     Block[] blocks = new Block[lines];
+
      try
      {
        br = new BufferedReader(new FileReader(args[0]));    //open file again
        //special case for genesis block
        line = br.readLine();
-       blocks[0] = blockchain.addBlock(line);
-       trans_list.add(line.split(","));
-       line_list.add(line);
-       if (!(trans_list.get(0)[0]).equals("0"))
+       try
        {
-         //TODO: Throw InvalidDataException. Invalid genesis line.
+         trans_list.add(line.split(","));
+         line_list.add(line);
+         if (!(trans_list.get(0)[0]).equals("0"))
+         {
+           throw new InvalidDataException((trans_list.get(0)[0]), 4);
+         }
+       } catch (InvalidDataException ide)
+       {
+         System.err.println("InvalidDataException: " + ide);
+         ide.printStackTrace();
+         System.err.println("Quitting...");
          System.exit(1);
        }
+
        //first, read through file and add each transaction parameter line to List
        for (int i = 1; i < lines; i++)
        {
          line = br.readLine();
-         blocks[i] = blockchain.addBlock(line);
          line_list.add(line);
          trans_list.add(line.split(","));
        }
@@ -299,52 +306,70 @@
      //genesis block special case, no hash to check, so start checking hashes at index 1
      //now, go through each block, either creating or transferring contains
      //continue to validate signatures for both coin (if necessary) and line
-     //NOTE: if we're creating, should create first then check block_sig; otherwise, check first then transfer
-     int j = 0;
+     //int j = 0;
      boolean valid_ret;
      String check_block;      //string we will use to validate block_sig
-     for (int i = 1; i < lines; i ++)
+     for (int j = 0; j < lines; j++)
      {
-       valid_ret = validate_hash(line_list.get(j), (trans_list.get(i)[0]));
-       if (!valid_ret)
+       //checks if not end of file, checks hash if not
+       if (j < (lines -1))
        {
-         System.exit(1);          //input error, exiting
+         valid_ret = validate_hash(line_list.get(j), (trans_list.get(j+1)[0]));
+         if (!valid_ret)
+         {
+           System.exit(1);          //input error, exiting
+         }
        }
        check_block = get_partial(line_list.get(j));     //partial to check against block_sig
-       if ((trans_list.get(j)[1]).equals("CREATE"))
+       try
        {
-         //CREATE block, try creating coin
-         valid_ret = create_coin((trans_list.get(j)[2]), (trans_list.get(j)[3]));
-         if (!valid_ret)
+         if ((trans_list.get(j)[1]).equals("CREATE"))
          {
-           System.exit(1);        //input error, exiting...
-         }
-         //now see if valid signature for Bill (creator)
-         valid_ret = check_sig(check_block, (trans_list.get(j)[4]), (trans_list.get(j)[2]));
-         if (!valid_ret)
+           //CREATE block, try creating coin
+           valid_ret = create_coin((trans_list.get(j)[2]), (trans_list.get(j)[3]));
+           if (!valid_ret)
+           {
+             System.exit(1);        //input error, exiting...
+           }
+           //now see if valid signature for Bill (creator)
+           valid_ret = check_sig(check_block, (trans_list.get(j)[4]), (trans_list.get(j)[2]));
+           if (!valid_ret)
+           {
+             System.exit(1);        //input error, exiting...
+           }
+         } else if ((trans_list.get(j)[1]).equals("TRANSFER"))
          {
-           System.exit(1);        //input error, exiting...
+           //TRANSFER block, validate sig first, then transfer if ok
+           valid_ret = check_sig(check_block, (trans_list.get(j)[4]), (trans_list.get(j)[2]));
+           if (!valid_ret)
+           {
+             System.exit(1);        //input error, exiting...
+           }
+           valid_ret = transfer_coin((trans_list.get(j)[2]), (trans_list.get(j)[3]));
+           if (!valid_ret)
+           {
+             System.exit(1);        //input error, exiting...
+           }
+         } else
+         {
+           throw new InvalidDataException((trans_list.get(j)[1]), 5);
          }
-       } else if ((trans_list.get(j)[1]).equals("TRANSFER"))
+       } catch (InvalidDataException ide)
        {
-         //TRANSFER block, validate sig first, then transfer if ok
-         valid_ret = check_sig(check_block, (trans_list.get(j)[4]), (trans_list.get(j)[2]));
-         if (!valid_ret)
-         {
-           System.exit(1);        //input error, exiting...
-         }
-         valid_ret = transfer_coin((trans_list.get(j)[2]), (trans_list.get(j)[3]));
-         if (!valid_ret)
-         {
-           System.exit(1);        //input error, exiting...
-         }
-       } else
-       {
-         //TODO: throw InvalidDataException. not valid block type
+         System.err.println("InvalidDataException: " + ide);
+         ide.printStackTrace();
+         System.err.println("Quitting...");
          System.exit(1);
        }
-       j++;  //continue through the lines
+
+       //j++;  //continue through the lines
      }
-     //TODO: Print out coins/owners as indicated by Laboon
+     //create sorted set of coins for printing
+     Set <String> sort_coins = new TreeSet<>(coin_map.keySet());
+     for (String coin : sort_coins)
+     {
+       System.out.println("Coin " + coin + " / Owner = " + coin_map.get(coin));
+     }
+     System.exit(0);              //successful completion!
    }
 }
