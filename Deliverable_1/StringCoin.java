@@ -312,15 +312,6 @@
      {
        try
        {
-         //checks if not end of file, checks hash if not
-         if (j < (lines -1))
-         {
-           valid_ret = validate_hash(line_list.get(j), (trans_list.get(j+1)[0]));
-           if (!valid_ret)
-           {
-             System.exit(1);          //input error, exiting
-           }
-         }
          check_block = get_partial(line_list.get(j));     //partial to check against block_sig
 
          if ((trans_list.get(j)[1]).equals("CREATE"))
@@ -354,10 +345,20 @@
          {
            throw new InvalidDataException((trans_list.get(j)[1]), 5);
          }
+         //checks if not end of file, checks hash if not
+         if (j < (lines -1))
+         {
+           valid_ret = validate_hash(line_list.get(j), (trans_list.get(j+1)[0]));
+           if (!valid_ret)
+           {
+             System.exit(1);          //input error, exiting
+           }
+         }
+
        } catch (InvalidDataException ide)
        {
          System.err.print("InvalidDataException: ");
-         //ide.printStackTrace();         Do I want this?
+         ide.printStackTrace();         //Do I want this?
          System.err.println("Quitting...");
          System.exit(1);
        }

@@ -15,7 +15,7 @@ public class InvalidDataException extends Exception
 
   public String toString()
   {
-    //return "Invalid " + error_output + ": " + _observed;
-    return "Invalid blockchain!";
+    return "Invalid " + error_output + ": " + _observed;
+    //return "Invalid blockchain!";
   }
 }
