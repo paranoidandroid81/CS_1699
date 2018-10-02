@@ -306,23 +306,23 @@
      //genesis block special case, no hash to check, so start checking hashes at index 1
      //now, go through each block, either creating or transferring contains
      //continue to validate signatures for both coin (if necessary) and line
-     //int j = 0;
      boolean valid_ret;
      String check_block;      //string we will use to validate block_sig
      for (int j = 0; j < lines; j++)
      {
-       //checks if not end of file, checks hash if not
-       if (j < (lines -1))
-       {
-         valid_ret = validate_hash(line_list.get(j), (trans_list.get(j+1)[0]));
-         if (!valid_ret)
-         {
-           System.exit(1);          //input error, exiting
-         }
-       }
-       check_block = get_partial(line_list.get(j));     //partial to check against block_sig
        try
        {
+         //checks if not end of file, checks hash if not
+         if (j < (lines -1))
+         {
+           valid_ret = validate_hash(line_list.get(j), (trans_list.get(j+1)[0]));
+           if (!valid_ret)
+           {
+             System.exit(1);          //input error, exiting
+           }
+         }
+         check_block = get_partial(line_list.get(j));     //partial to check against block_sig
+
          if ((trans_list.get(j)[1]).equals("CREATE"))
          {
            //CREATE block, try creating coin
@@ -356,13 +356,11 @@
          }
        } catch (InvalidDataException ide)
        {
-         System.err.println("InvalidDataException: " + ide);
-         ide.printStackTrace();
+         System.err.print("InvalidDataException: ");
+         //ide.printStackTrace();         Do I want this?
          System.err.println("Quitting...");
          System.exit(1);
        }
-
-       //j++;  //continue through the lines
      }
      //create sorted set of coins for printing
      Set <String> sort_coins = new TreeSet<>(coin_map.keySet());
