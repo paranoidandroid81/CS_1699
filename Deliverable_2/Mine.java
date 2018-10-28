@@ -165,7 +165,7 @@
      return convertBytesToHexString(hash);
    }
 
-   /**
+   /*
     * Find nonce for block so H(block) < target
     * Nonce = 4 ASCII characters, values of 32-126 in decimal
     */
